@@ -1,0 +1,5 @@
+*.o
+outputs/*
+simplify
+.DS_Store
+.vscode
