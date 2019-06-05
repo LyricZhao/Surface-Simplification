@@ -3,6 +3,7 @@
 
 # define MAX_LENGTH 65536ul
 
+# include <cassert>
 # include <cmath>
 # include <fstream>
 # include <iostream>
@@ -26,9 +27,19 @@ private:
 
         Face(int *v) {
             dim[0] = v[0], dim[1] = v[1], dim[2] = v[2];
+            sort();
             return;
         }
 
+        Face(int v0, int v1, int v2) {
+            dim[0] = v0, dim[1] = v1, dim[2] = v2;
+            sort();
+            return;
+        }
+
+        inline bool contain(int v) const {
+            return dim[0] == v || dim[1] == v || dim[2] == v;
+        }
         inline void sort() {
             int min_d = std:: min(std:: min(dim[0], dim[1]), dim[2]);
             if(min_d == dim[0])
@@ -55,6 +66,27 @@ private:
         double dim[3], q[16];
         std:: set<Face> faces;
 
+        inline void replace(double *nd, double *qb) {
+            dim[0] = nd[0], dim[1] = nd[1], dim[2] = nd[2];
+            for(int i = 0; i < 16; ++ i) q[i] += qb[i];
+            return;
+        }
+        inline std:: vector<int> find_another(int id, int v, bool option=false) {
+            std:: vector<int> another;
+            for(auto &face: faces) {
+                if(face.contain(v) == option) continue;
+                for(int j = 0; j < 3; ++ j) if(face.dim[j] != id && face.dim[j] != v)
+                    another.push_back(face.dim[j]);
+            }
+            return another;
+        }
+        inline bool count_face(const Face &face) {
+            return faces.count(face) > 0;
+        }
+        inline void remove_face(const Face &face) {
+            faces.erase(face);
+            return;
+        }
         inline friend std:: ostream& operator << (std:: ostream &os, const Vertex &v) {
             os << "v " << v.dim[0] << " " << v.dim[1] << " " << v.dim[2];
             return os;
@@ -72,6 +104,12 @@ private:
         int v0, v1, time;
         double cost, dim[3];
 
+        Pair(int _v0, int _v1) {
+            v0 = _v0, v1 = _v1;
+            sort();
+            return;
+        }
+
         inline void sort() { if(v0 > v1) std:: swap(v0, v1); return; }
         inline bool operator < (const Pair &b) const {
             return cost < b.cost;
@@ -86,8 +124,13 @@ private:
         int stamp;
         std:: map<unsigned long long, int> times;
         std:: priority_queue<Pair> queue;
+        std:: vector<std:: set<int> > in_queue_pairs;
         
         Heap() { stamp = 0; return; }
+        inline void resize_queue_pairs(int n) {
+            in_queue_pairs.reserve(n);
+            return;
+        }
         inline void clear() {
             stamp = 0, times.clear();
             while(queue.size())
@@ -118,10 +161,14 @@ private:
         inline void insert(Pair &pair) {
             pair.time = ++ stamp;
             times[pair.index_hash()] = stamp;
+            in_queue_pairs[pair.v0].insert(pair.v1);
+            in_queue_pairs[pair.v1].insert(pair.v0);
             return;
         }
         inline void del(const Pair &pair) {
             times[pair.index_hash()] = -1;
+            in_queue_pairs[pair.v0].erase(pair.v1);
+            in_queue_pairs[pair.v1].erase(pair.v0);
             return;
         }
     };
@@ -145,7 +192,6 @@ private:
     void calculate_Q();
     void select_pairs(double t);
     void aggregation();
-    void refresh_memory();
 
 public:
     Mesh();
@@ -196,7 +242,7 @@ void Mesh:: add_face(std:: string line) {
         v[i] = atoi(read_number(line, pos).c_str()) - 1;
         if(read_twice) read_number(line, pos);
     }
-    Face face(v); face.sort();
+    Face face(v);
     for(int i = 0; i < 3; ++ i)
         vertexes[v[i]].add_face(face);
     return;
@@ -247,8 +293,7 @@ void Mesh:: get_new_v(double *q, double *dim, double *dim_a, double *dim_b) {
 }
 
 void Mesh:: add_pair(int v0, int v1) {
-    if(v0 > v1) std:: swap(v0, v1);
-    Pair pair; pair.v0 = v0, pair.v1 = v1;
+    Pair pair(v0, v1);
     Vertex &a = vertexes[v0], &b = vertexes[v1];
     double q[16];
     for(int i = 0; i < 16; ++ i) q[i] = a.q[i] + b.q[i];
@@ -291,25 +336,69 @@ void Mesh:: calculate_Q() {
     return;
 }
 
+/*
+ * Aggregation:
+ *  Merge v0 and v1
+ *  Update v0 and connected faces
+ *  Replace v1 to v0
+ *  Remove the faces containing v0 and v1
+ *  Update the value containing only v0
+ *  Fix the faces containing only v1
+ */
 void Mesh:: aggregation() {
     Pair pair = heap.top(); heap.pop();
 
-    return;
-}
+    /* Merge set */
+    int v0 = pair.v0, v1 = pair.v1;
+    assert((get_father(v0) == v0) && (get_father(v1) == v1));
+    vertexes[v1].father = v0;
 
-void Mesh:: refresh_memory() {
-    heap.clear();
-    edges.clear();
+    /* Remove the faces containing v0 and v1, no need to remove v1 */
+    std:: vector<int> another = vertexes[v0].find_another(v0, v1);
+    for(auto v: another) {
+        Face face(v, v0, v1);
+        vertexes[v].remove_face(face);
+        vertexes[v0].remove_face(face);
+        -- face_tot;
+    }
+
+    /* Connect the connected points of v1 to v0, no need to remove v1 */
+    another = vertexes[v1].find_another(v1, v0, true);
+    for(int i = 0; i < another.size(); i += 2) {
+        int a = another[i], b = another[i + 1];
+        Face original_face(a, b, v1), new_face(a, b, v0);
+        vertexes[a].remove_face(original_face), vertexes[b].remove_face(original_face);
+        if(!vertexes[v0].count_face(new_face))
+            vertexes[a].add_face(new_face), vertexes[b].add_face(new_face), vertexes[v0].add_face(new_face);
+        else
+            -- face_tot;
+    }
+
+    /* Update v0 */
+    vertexes[v0].replace(pair.dim, vertexes[v1].q);
+
+    /* Remove all the pairs containing v1 in the queue */
+    std:: set<int> &in_queue_pairs_1 = heap.in_queue_pairs[v1];
+    for(auto v: in_queue_pairs_1)
+        heap.del(Pair(v, v1));
+
+    /* Update the value containing v0 in the queue, note that there are new pairs */
+    std:: set<int> &in_queue_pairs_0 = heap.in_queue_pairs[v0];
+    for(auto v: in_queue_pairs_0)
+        add_pair(v, v0);
+    
+    /* TODO: considering new pair */
+    
     return;
 }
 
 void Mesh:: simplify(double ratio, double t) {
     calculate_Q();
     select_pairs(t);
+    heap.resize_queue_pairs(vertexes.size());
     int target = face_count() * ratio;
     while(face_count() > target)
         aggregation();
-    refresh_memory();
     return;
 }
 
