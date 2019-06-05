@@ -1,4 +1,5 @@
 APP = simplify
+ENTRANCE = main
 
 OBJECTS = main.o
 MESHES = meshes/*
@@ -18,8 +19,8 @@ $(APP): $(OBJECTS) Makefile
 	echo 'Linking: $(APP)' && \
 	$(CXXC) $(LINKFLAGS) $(OBJECTS) -o $(APP)
 
-$(APP).o: $(APP).cpp Makefile
-	echo 'Compiling: $(APP).o:'	&& \
+$(ENTRANCE).o: $(ENTRANCE).cpp Makefile
+	echo 'Compiling: $(ENTRANCE).o:'	&& \
 	$(CXXC) $(CXXFLAGS) -c $*.cpp -o $*.o
 
 %.o: %.cpp %.h Makefile
