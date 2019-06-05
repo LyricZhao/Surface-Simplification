@@ -3,6 +3,7 @@
 
 # define MAX_LENGTH 65536ul
 
+# include <cmath>
 # include <fstream>
 # include <iostream>
 # include <set>
@@ -10,6 +11,8 @@
 # include <vector>
 
 char buffer[MAX_LENGTH];
+
+inline double sqr(double x) { return x * x; }
 
 class Mesh {
 private:
@@ -44,7 +47,7 @@ private:
 
     struct Vertex {
         int father;
-        double dim[3], q[4][4];
+        double dim[3], q[16];
         std:: set<Face> faces;
 
         inline friend std:: ostream& operator << (std:: ostream &os, const Vertex &v) {
@@ -60,6 +63,8 @@ private:
     int tot;
     std:: vector<Vertex> vertexes; /* All indexes start from zero. */
 
+    void get_p(const Face &face, double *p);
+    void add_kp(const Face &face, double *kp);
     int face_count();
     int get_father(int v);
     std:: string read_number(std:: string line, int &pos);
@@ -118,10 +123,33 @@ void Mesh:: add_face(std:: string line) {
     for(int i = 0; i < 3; ++ i)
         vertexes[v[i]].add_face(face);
     return;
-} 
+}
+
+void Mesh:: get_p(const Face &face, double *p) {
+    Vertex &a = vertexes[face.dim[0]], &b = vertexes[face.dim[1]], &c = vertexes[face.dim[2]];
+    p[0] = (b.dim[1] - a.dim[1]) * (c.dim[2] - a.dim[2]) - (c.dim[1] - a.dim[1]) * (b.dim[2] - a.dim[2]);
+    p[1] = (b.dim[2] - a.dim[2]) * (c.dim[0] - a.dim[0]) - (c.dim[2] - a.dim[2]) * (b.dim[0] - a.dim[0]);
+    p[2] = (b.dim[0] - a.dim[0]) * (c.dim[1] - a.dim[1]) - (c.dim[0] - a.dim[0]) * (b.dim[1] - a.dim[1]);
+    double div = sqrt(sqr(p[0]) + sqr(p[1]) + sqr(p[2]));
+    p[0] /= div, p[1] /= div, p[2] /= div;
+    p[3] = -p[0] * a.dim[0] - p[1] * a.dim[1] - p[2] * a.dim[2];
+    return;
+}
+
+void Mesh:: add_kp(const Face &face, double *kp) {
+    double p[4];
+    get_p(face, p);
+    for(int i = 0; i < 4; ++ i) for(int j = 0; j < 4; ++ j)
+        kp[i * 4 + j] += p[i] * p[j];
+    return;
+}
 
 void Mesh:: calculate_Q() {
-    
+    for(auto &v: vertexes) {
+        memset(v.q, 0, sizeof(int) * 16);
+        for(auto &face: v.faces)
+            add_kp(face, v.q);
+    }
     return;
 }
 
