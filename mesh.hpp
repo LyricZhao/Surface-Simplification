@@ -4,6 +4,7 @@
 # define MAX_LENGTH 65536ul
 
 # include <cassert>
+# include <cstring>
 # include <cmath>
 # include <fstream>
 # include <iostream>
@@ -74,10 +75,10 @@ private:
             os << "f " << face.dim[0] << " " << face.dim[1] << " " << face.dim[2];
             return os;
         }
-        inline bool operator < (const Face &b) const {
-            return dim[0] != b.dim[0] ? (dim[0] < b.dim[0]) :
-                (dim[1] != b.dim[1] ? (dim[1] < b.dim[1]) :
-                (dim[2] < b.dim[2]));
+        friend bool operator < (const Face &a, const Face &b) {
+            return a.dim[0] != b.dim[0] ? (a.dim[0] < b.dim[0]) :
+                (a.dim[1] != b.dim[1] ? (a.dim[1] < b.dim[1]) :
+                (a.dim[2] < b.dim[2]));
         }
     };
 
@@ -268,7 +269,7 @@ void Mesh:: add_face(std:: string line) {
 }
 
 double Mesh:: get_cost(double *dim, double *q) {
-    double q[16], t[4], nd[4];
+    double t[4], nd[4];
     for(int i = 0; i < 4; ++ i) t[i] = 0;
     nd[0] = dim[0], nd[1] = dim[1], nd[2] = dim[2], nd[3] = 1.;
     for(int i = 0; i < 4; ++ i) for(int j = 0; j < 4; ++ j)
@@ -280,13 +281,13 @@ double Mesh:: get_cost(double *dim, double *q) {
 }
 
 void Mesh:: get_p(const Face &face, double *p) {
-    Vertex &a = vertexes[face.dim[0]], &b = vertexes[face.dim[1]], &c = vertexes[face.dim[2]];
-    p[0] = (b.dim[1] - a.dim[1]) * (c.dim[2] - a.dim[2]) - (c.dim[1] - a.dim[1]) * (b.dim[2] - a.dim[2]);
-    p[1] = (b.dim[2] - a.dim[2]) * (c.dim[0] - a.dim[0]) - (c.dim[2] - a.dim[2]) * (b.dim[0] - a.dim[0]);
-    p[2] = (b.dim[0] - a.dim[0]) * (c.dim[1] - a.dim[1]) - (c.dim[0] - a.dim[0]) * (b.dim[1] - a.dim[1]);
+    double *a_dim = vertexes[face.dim[0]].dim, *b_dim = vertexes[face.dim[1]].dim, *c_dim = vertexes[face.dim[2]].dim;
+    p[0] = (b_dim[1] - a_dim[1]) * (c_dim[2] - a_dim[2]) - (c_dim[1] - a_dim[1]) * (b_dim[2] - a_dim[2]);
+    p[1] = (b_dim[2] - a_dim[2]) * (c_dim[0] - a_dim[0]) - (c_dim[2] - a_dim[2]) * (b_dim[0] - a_dim[0]);
+    p[2] = (b_dim[0] - a_dim[0]) * (c_dim[1] - a_dim[1]) - (c_dim[0] - a_dim[0]) * (b_dim[1] - a_dim[1]);
     double div = sqrt(sqr(p[0]) + sqr(p[1]) + sqr(p[2]));
     p[0] /= div, p[1] /= div, p[2] /= div;
-    p[3] = -p[0] * a.dim[0] - p[1] * a.dim[1] - p[2] * a.dim[2];
+    p[3] = -p[0] * a_dim[0] - p[1] * a_dim[1] - p[2] * a_dim[2];
     return;
 }
 
@@ -322,17 +323,19 @@ void Mesh:: add_pair(int v0, int v1) {
     return;
 }
 
+/* Potential bug: dfs is invalid when v0 and v1 are unconnected. */
 void Mesh:: select_dfs(int v, int p, int depth, double t, std:: set<int> &searched) {
-    if((depth > 1 && vertexes[v].distance(vertexes[p].distance) > t) || searched.count(p) > 0) return;
+    if((depth > 1 && vertexes[v].distance(vertexes[p]) > t) || searched.count(p) > 0) return;
     searched.insert(p);
     if(depth >= 0 && v != p)
         add_pair(v, p);
-    for(auto next: edges[v])
+    for(auto next: edges[p])
         select_dfs(v, next, depth + 1, t, searched);
     return;
 }
 
 void Mesh:: select_pairs(double t) {
+    std:: cout << "Selecting pairs with t = " << t << " ... " << std:: flush;
     for(int i = 0; i < vertexes.size(); ++ i) {
         for(auto face: vertexes[i].faces) {
             for(int j = 0; j < 3; ++ j) if(face.dim[j] != i)
@@ -340,18 +343,25 @@ void Mesh:: select_pairs(double t) {
         }
     }
     for(int i = 0; i < vertexes.size(); ++ i) {
+        /*
         std:: set<int> searched;
         select_dfs(i, i, 0, t, searched);
+        */
+        for(int j = i + 1; j < vertexes.size(); ++ j) if(vertexes[i].distance(vertexes[j]) < t || edges[i].count(j))
+            add_pair(i, j);
     }
+    std:: cout << "ok !" << std:: endl;
     return;
 }
 
 void Mesh:: calculate_Q() {
+    std:: cout << "Calculating Q matrix ... " << std:: flush;
     for(auto &v: vertexes) {
         memset(v.q, 0, sizeof(int) * 16);
         for(auto &face: v.faces)
             add_kp(face, v.q);
     }
+    std:: cout << "ok !" << std:: endl;
     return;
 }
 
@@ -389,11 +399,14 @@ void Mesh:: aggregation() {
 
     /* Remove all the pairs containing v1 in the queue, and connect them to v0 */
     std:: set<int> &in_queue_pairs_1 = heap.in_queue_pairs[v1];
-    for(auto v: in_queue_pairs_1)
-        heap.del(Pair(v, v1)), add_pair(v, v0);
+    std:: set<int> &in_queue_pairs_0 = heap.in_queue_pairs[v0];
+    for(auto v: in_queue_pairs_1) {
+        heap.del(Pair(v, v1));
+        if(!in_queue_pairs_0.count(v))
+            add_pair(v, v0);
+    }
 
     /* Update the value containing v0 in the queue, note that there are new pairs */
-    std:: set<int> &in_queue_pairs_0 = heap.in_queue_pairs[v0];
     for(auto v: in_queue_pairs_0)
         add_pair(v, v0);
     
@@ -402,16 +415,21 @@ void Mesh:: aggregation() {
 }
 
 void Mesh:: simplify(double ratio, double t) {
+    std:: cout << "Starting to simlify ... ok !" << std:: endl;
     calculate_Q();
     select_pairs(t);
     heap.resize_queue_pairs(vertexes.size());
+
+    std:: cout << "Doing aggregation ... " << std:: flush;
     int target = face_count() * ratio;
     while(face_count() > target)
         aggregation();
+    std:: cout << " ok!" << std:: endl;
     return;
 }
 
 void Mesh:: load_from_file(std:: string path) {
+    std:: cout << "Loading from obj file " + path + " ... " << std:: flush;
     std:: ifstream input(path);
     while(input.getline(buffer, MAX_LENGTH)) {
         std:: string line = buffer;
@@ -419,10 +437,12 @@ void Mesh:: load_from_file(std:: string path) {
         if(line[0] == 'v') add_vertex(line);
         if(line[0] == 'f') add_face(line);
     }
+    std:: cout << "ok !" << std:: endl;
     return;
 }
 
 void Mesh:: write_into_file(std:: string path) {
+    std:: cout << "Writing into obj file " + path + " ... " << std:: flush;
     int *index = (int*) std:: malloc(sizeof(int) * tot), cnt = 0;
     std:: ofstream output(path);
     for(int i = 0; i < vertexes.size(); ++ i) {
@@ -438,6 +458,7 @@ void Mesh:: write_into_file(std:: string path) {
         }
     }
     std:: free(index);
+    std:: cout << "ok !" << std:: endl;
     return;
 }
 
