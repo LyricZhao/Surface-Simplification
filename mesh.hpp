@@ -23,6 +23,7 @@ inline double sqr(double x) {
 class Mesh {
 private:
     struct Face {
+        /* Note: the order can not be ignored */
         int dim[3];
 
         Face(int *v) {
@@ -37,6 +38,25 @@ private:
             return;
         }
 
+        inline void replace(int v0, int v1) {
+            if(dim[0] == v0) dim[0] = v1;
+            else if(dim[1] == v0) dim[1] = v1;
+            else if(dim[2] == v0) dim[2] = v1;
+            else assert(0);
+            return;
+        }
+        inline int find_diff(int v0) {
+            if(dim[0] != v0) return dim[0];
+            if(dim[1] != v0) return dim[1];
+            if(dim[2] != v0) return dim[2];
+            assert(0);
+        }
+        inline int find_diff(int v0, int v1) {
+            if(dim[0] != v0 && dim[0] != v1) return dim[0];
+            if(dim[1] != v0 && dim[1] != v1) return dim[1];
+            if(dim[2] != v0 && dim[2] != v1) return dim[2];
+            assert(0);
+        }
         inline bool contain(int v) const {
             return dim[0] == v || dim[1] == v || dim[2] == v;
         }
@@ -71,12 +91,11 @@ private:
             for(int i = 0; i < 16; ++ i) q[i] += qb[i];
             return;
         }
-        inline std:: vector<int> find_another(int id, int v, bool option=false) {
-            std:: vector<int> another;
+        inline std:: vector<Face> find_another(int id, int v, bool option=false) {
+            std:: vector<Face> another;
             for(auto &face: faces) {
                 if(face.contain(v) == option) continue;
-                for(int j = 0; j < 3; ++ j) if(face.dim[j] != id && face.dim[j] != v)
-                    another.push_back(face.dim[j]);
+                another.push_back(face);
             }
             return another;
         }
@@ -336,15 +355,6 @@ void Mesh:: calculate_Q() {
     return;
 }
 
-/*
- * Aggregation:
- *  Merge v0 and v1
- *  Update v0 and connected faces
- *  Replace v1 to v0
- *  Remove the faces containing v0 and v1
- *  Update the value containing only v0
- *  Fix the faces containing only v1
- */
 void Mesh:: aggregation() {
     Pair pair = heap.top(); heap.pop();
 
@@ -354,9 +364,9 @@ void Mesh:: aggregation() {
     vertexes[v1].father = v0;
 
     /* Remove the faces containing v0 and v1, no need to remove v1 */
-    std:: vector<int> another = vertexes[v0].find_another(v0, v1);
-    for(auto v: another) {
-        Face face(v, v0, v1);
+    std:: vector<Face> another = vertexes[v0].find_another(v0, v1);
+    for(auto face: another) {
+        int v = face.find_diff(v0, v1);
         vertexes[v].remove_face(face);
         vertexes[v0].remove_face(face);
         -- face_tot;
@@ -364,9 +374,9 @@ void Mesh:: aggregation() {
 
     /* Connect the connected points of v1 to v0, no need to remove v1 */
     another = vertexes[v1].find_another(v1, v0, true);
-    for(int i = 0; i < another.size(); i += 2) {
-        int a = another[i], b = another[i + 1];
-        Face original_face(a, b, v1), new_face(a, b, v0);
+    for(auto original_face: another) {
+        int a = original_face.find_diff(v1), b = original_face.find_diff(a, v1);
+        Face new_face(original_face); new_face.replace(v1, v0);
         vertexes[a].remove_face(original_face), vertexes[b].remove_face(original_face);
         if(!vertexes[v0].count_face(new_face))
             vertexes[a].add_face(new_face), vertexes[b].add_face(new_face), vertexes[v0].add_face(new_face);
@@ -374,21 +384,20 @@ void Mesh:: aggregation() {
             -- face_tot;
     }
 
-    /* Update v0 */
+    /* Replace v0 with the new node */
     vertexes[v0].replace(pair.dim, vertexes[v1].q);
 
-    /* Remove all the pairs containing v1 in the queue */
+    /* Remove all the pairs containing v1 in the queue, and connect them to v0 */
     std:: set<int> &in_queue_pairs_1 = heap.in_queue_pairs[v1];
     for(auto v: in_queue_pairs_1)
-        heap.del(Pair(v, v1));
+        heap.del(Pair(v, v1)), add_pair(v, v0);
 
     /* Update the value containing v0 in the queue, note that there are new pairs */
     std:: set<int> &in_queue_pairs_0 = heap.in_queue_pairs[v0];
     for(auto v: in_queue_pairs_0)
         add_pair(v, v0);
     
-    /* TODO: considering new pair */
-    
+    /* TODO: considering new pair in the condition of t */
     return;
 }
 

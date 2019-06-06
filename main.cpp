@@ -7,7 +7,8 @@ int main(int argc, char **argv) {
         std:: cout << "Usage: simplifier <input> <output> <ratio> (t)." << std:: endl;
         return 0;
     }
-    std:: string input(argv[1]), output(argv[2]); double ratio = atof(argv[3]), t = -1.;
+    std:: string input(argv[1]), output(argv[2]);
+    double ratio = atof(argv[3]), t = -1.;
     if(argc == 5) t = atof(argv[4]);
 
     Mesh mesh;
