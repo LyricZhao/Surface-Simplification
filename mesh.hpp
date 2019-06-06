@@ -2,6 +2,7 @@
 # define __MESH_H__
 
 # define MAX_LENGTH 65536ul
+
 # define DFS_T_SEARCH
 # define FLIP_COST
 # define SHARP_COST
@@ -373,7 +374,7 @@ void Mesh:: add_pair(int v0, int v1) {
         get_norm(norm_0, vertexes[a].dim, vertexes[b].dim, vertexes[c].dim);
         a = common_faces[1].dim[0], b = common_faces[1].dim[1], c = common_faces[1].dim[2];
         get_norm(norm_1, vertexes[a].dim, vertexes[b].dim, vertexes[c].dim);
-        pair.cost /= std:: min(1., fabs(cos_distance(norm_0, norm_1)) / 0.4);
+        pair.cost /= std:: min(1., cos_distance(norm_0, norm_1) + 1.1);
     }
     # endif
 
@@ -383,9 +384,10 @@ void Mesh:: add_pair(int v0, int v1) {
 
 /* Potential bug: dfs is invalid when v0 and v1 are unconnected, and the distance is not accurate. */
 void Mesh:: select_dfs(int v, int p, int depth, double t, std:: set<int> &searched) {
-    if((depth > 1 && vertexes[v].distance(vertexes[p]) > t) || searched.count(p) > 0) return;
+    double dist = vertexes[v].distance(vertexes[p]);
+    if((depth > 1 && dist > t) || searched.count(p) > 0) return;
     searched.insert(p);
-    if(depth >= 0 && v != p && v < p)
+    if(depth >= 0 && v < p)
         add_pair(v, p);
     for(auto next: edges[p])
         select_dfs(v, next, depth + 1, t, searched);

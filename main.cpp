@@ -4,7 +4,7 @@
 
 int main(int argc, char **argv) {
     if(argc < 4) {
-        std:: cout << "Usage: simplifier <input> <output> <ratio> (t)." << std:: endl;
+        std:: cout << "Usage: simplify <input> <output> <ratio> (<t>)." << std:: endl;
         return 0;
     }
     std:: string input(argv[1]), output(argv[2]);
