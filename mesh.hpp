@@ -238,7 +238,7 @@ int Mesh:: get_father(int v) {
 
 std:: string Mesh:: read_number(std:: string line, int &pos) {
     auto is_number = [] (char c) -> bool {
-        return ('0' <= c && c <= '9') || c == '.' || c == '-';
+        return ('0' <= c && c <= '9') || c == '.' || c == '-' || c == 'e';
     };
     int start = pos;
     while(start < line.length() && !is_number(line[start])) ++ start;
@@ -330,7 +330,7 @@ void Mesh:: add_pair(int v0, int v1) {
 void Mesh:: select_dfs(int v, int p, int depth, double t, std:: set<int> &searched) {
     if((depth > 1 && vertexes[v].distance(vertexes[p]) > t) || searched.count(p) > 0) return;
     searched.insert(p);
-    if(depth >= 0 && v != p)
+    if(depth >= 0 && v != p && v < p)
         add_pair(v, p);
     for(auto next: edges[p])
         select_dfs(v, next, depth + 1, t, searched);
@@ -347,13 +347,16 @@ void Mesh:: select_pairs(double t) {
                 edges[i].insert(face.dim[j]);
         }
     }
-    for(int i = 0; i < vertexes.size(); ++ i) {
-        /*
-        std:: set<int> searched;
-        select_dfs(i, i, 0, t, searched);
-        */
-        for(int j = i + 1; j < vertexes.size(); ++ j) if(vertexes[i].distance(vertexes[j]) < t || edges[i].count(j))
+    if(t < eps) {
+        for(int i = 0; i < vertexes.size(); ++ i) for(int j: edges[i]) if(i < j)
             add_pair(i, j);
+    } else {
+        for(int i = 0; i < vertexes.size(); ++ i) {
+            // std:: set<int> searched;
+            // select_dfs(i, i, 0, t, searched);
+            for(int j = i + 1; j < vertexes.size(); ++ j) if(vertexes[i].distance(vertexes[j]) < t || edges[i].count(j))
+                add_pair(i, j);
+        }
     }
     std:: cout << "ok !" << std:: endl;
     return;
@@ -411,7 +414,7 @@ void Mesh:: aggregation() {
             add_pair(v, v0);
     }
 
-    /* Update the value containing v0 in the queue, note that there are new pairs */
+    /* Update the value containing v0 in the queue, note that there are new pairs. The effect is brilliant! */
     for(auto v: in_queue_pairs_0) if(v != v1)
         add_pair(v, v0);
     
@@ -429,7 +432,7 @@ void Mesh:: simplify(double ratio, double t) {
     while(face_count() > target) {
         aggregation();
     }
-    std:: cout << " ok!" << std:: endl;
+    std:: cout << "ok!" << std:: endl;
     return;
 }
 

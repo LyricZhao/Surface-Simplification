@@ -13,6 +13,7 @@ LINKFLAGS = -O3
 COMMENTS = ''
 TEST_OBJ = arma.obj
 TEST_RATIO = 0.1
+TEST_T = ''
 DEL = rm -rf
 
 default:
@@ -32,7 +33,7 @@ $(ENTRANCE).o: $(ENTRANCE).cpp $(HPPS) Makefile
 
 run:
 	make
-	./$(APP) meshes/$(TEST_OBJ) outputs/$(TEST_OBJ) $(TEST_RATIO)
+	./$(APP) meshes/$(TEST_OBJ) outputs/$(TEST_OBJ) $(TEST_RATIO) $(TEST_T)
 
 clean:
 	make clean_objs
