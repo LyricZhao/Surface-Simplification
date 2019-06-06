@@ -2,6 +2,7 @@ APP = simplify
 ENTRANCE = main
 
 OBJECTS = main.o
+HPPS = mesh.hpp
 MESHES = meshes/*
 OUTPUTS = outputs/*
 
@@ -10,6 +11,8 @@ CXXFLAGS = -std=c++11 -O3
 LINKFLAGS = -O3
 
 COMMENTS = ''
+TEST_OBJ = arma.obj
+TEST_RATIO = 0.1
 DEL = rm -rf
 
 default:
@@ -19,7 +22,7 @@ $(APP): $(OBJECTS) Makefile
 	echo 'Linking: $(APP)' && \
 	$(CXXC) $(LINKFLAGS) $(OBJECTS) -o $(APP)
 
-$(ENTRANCE).o: $(ENTRANCE).cpp Makefile
+$(ENTRANCE).o: $(ENTRANCE).cpp $(HPPS) Makefile
 	echo 'Compiling: $(ENTRANCE).o:'	&& \
 	$(CXXC) $(CXXFLAGS) -c $*.cpp -o $*.o
 
@@ -29,7 +32,7 @@ $(ENTRANCE).o: $(ENTRANCE).cpp Makefile
 
 run:
 	make
-	./$(APP)
+	./$(APP) meshes/$(TEST_OBJ) outputs/$(TEST_OBJ) $(TEST_RATIO)
 
 clean:
 	make clean_objs

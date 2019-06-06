@@ -15,7 +15,7 @@
 # include <vector>
 
 char buffer[MAX_LENGTH];
-const double eps = 1e-8;
+const double eps = 1e-12;
 
 inline double sqr(double x) {
     return x * x;
@@ -132,7 +132,7 @@ private:
 
         inline void sort() { if(v0 > v1) std:: swap(v0, v1); return; }
         inline bool operator < (const Pair &b) const {
-            return cost < b.cost;
+            return cost > b.cost;
         }
         inline unsigned long long index_hash() const {
             return (((unsigned long long)v0) << 32) | ((unsigned long long)v1);
@@ -148,7 +148,7 @@ private:
         
         Heap() { stamp = 0; return; }
         inline void resize_queue_pairs(int n) {
-            in_queue_pairs.reserve(n);
+            in_queue_pairs.resize(n);
             return;
         }
         inline void clear() {
@@ -181,6 +181,7 @@ private:
         inline void insert(Pair &pair) {
             pair.time = ++ stamp;
             times[pair.index_hash()] = stamp;
+            queue.push(pair);
             in_queue_pairs[pair.v0].insert(pair.v1);
             in_queue_pairs[pair.v1].insert(pair.v0);
             return;
@@ -237,7 +238,7 @@ int Mesh:: get_father(int v) {
 
 std:: string Mesh:: read_number(std:: string line, int &pos) {
     auto is_number = [] (char c) -> bool {
-        return ('0' <= c && c <= '9') || c == '.';
+        return ('0' <= c && c <= '9') || c == '.' || c == '-';
     };
     int start = pos;
     while(start < line.length() && !is_number(line[start])) ++ start;
@@ -251,6 +252,7 @@ void Mesh:: add_vertex(std:: string line) {
     vertex.father = tot ++;
     for(int i = 0, pos = 0; i < 3; ++ i)
         vertex.dim[i] = atof(read_number(line, pos).c_str());
+    vertexes.push_back(vertex);
     return;
 }
 
@@ -301,7 +303,7 @@ void Mesh:: add_kp(const Face &face, double *kp) {
 
 void Mesh:: get_new_v(double *q, double *dim, double *dim_a, double *dim_b) {
     double d = q[0] * q[5] * q[10] - q[0] * q[6] * q[6] - q[1] * q[1] * q[10] + q[1] * q[6] * q[2] + q[2] * q[1] * q[6] - q[2] * q[5] * q[2];
-    if(d > eps) {
+    if(fabs(d) > eps) {
         double x = q[3] * q[5] * q[10] - q[3] * q[6] * q[6] - q[7] * q[1] * q[10] + q[7] * q[6] * q[2] + q[11] * q[1] * q[6] - q[11] * q[5] * q[2];
         double y = q[0] * q[7] * q[10] - q[0] * q[11] * q[6] - q[1] * q[3] * q[10] + q[1] * q[11] * q[2] + q[2] * q[3] * q[6] - q[2] * q[7] * q[2];
         double z = q[0] * q[5] * q[11] - q[0] * q[6] * q[7] - q[1] * q[1] * q[11] + q[1] * q[6] * q[3] + q[2] * q[1] * q[7] - q[2] * q[5] * q[3];
@@ -314,10 +316,11 @@ void Mesh:: get_new_v(double *q, double *dim, double *dim_a, double *dim_b) {
 
 void Mesh:: add_pair(int v0, int v1) {
     Pair pair(v0, v1);
-    Vertex &a = vertexes[v0], &b = vertexes[v1];
+    double *a_dim = vertexes[v0].dim, *b_dim = vertexes[v1].dim;
+    double *a_q = vertexes[v0].q, *b_q = vertexes[v1].q;
     double q[16];
-    for(int i = 0; i < 16; ++ i) q[i] = a.q[i] + b.q[i];
-    get_new_v(q, pair.dim, a.dim, b.dim);
+    for(int i = 0; i < 16; ++ i) q[i] = a_q[i] + b_q[i];
+    get_new_v(q, pair.dim, a_dim, b_dim);
     pair.cost = get_cost(pair.dim, q);
     heap.insert(pair);
     return;
@@ -336,6 +339,8 @@ void Mesh:: select_dfs(int v, int p, int depth, double t, std:: set<int> &search
 
 void Mesh:: select_pairs(double t) {
     std:: cout << "Selecting pairs with t = " << t << " ... " << std:: flush;
+    edges.resize(vertexes.size());
+    heap.resize_queue_pairs(vertexes.size());
     for(int i = 0; i < vertexes.size(); ++ i) {
         for(auto face: vertexes[i].faces) {
             for(int j = 0; j < 3; ++ j) if(face.dim[j] != i)
@@ -398,16 +403,16 @@ void Mesh:: aggregation() {
     vertexes[v0].replace(pair.dim, vertexes[v1].q);
 
     /* Remove all the pairs containing v1 in the queue, and connect them to v0 */
-    std:: set<int> &in_queue_pairs_1 = heap.in_queue_pairs[v1];
-    std:: set<int> &in_queue_pairs_0 = heap.in_queue_pairs[v0];
+    std:: set<int> in_queue_pairs_0 = heap.in_queue_pairs[v0]; /* Note: here must be copying */
+    std:: set<int> in_queue_pairs_1 = heap.in_queue_pairs[v1]; /* Note: here must be copying */
     for(auto v: in_queue_pairs_1) {
         heap.del(Pair(v, v1));
-        if(!in_queue_pairs_0.count(v))
+        if(!in_queue_pairs_0.count(v) && v != v0)
             add_pair(v, v0);
     }
 
     /* Update the value containing v0 in the queue, note that there are new pairs */
-    for(auto v: in_queue_pairs_0)
+    for(auto v: in_queue_pairs_0) if(v != v1)
         add_pair(v, v0);
     
     /* TODO: considering new pair in the condition of t */
@@ -418,12 +423,12 @@ void Mesh:: simplify(double ratio, double t) {
     std:: cout << "Starting to simlify ... ok !" << std:: endl;
     calculate_Q();
     select_pairs(t);
-    heap.resize_queue_pairs(vertexes.size());
 
     std:: cout << "Doing aggregation ... " << std:: flush;
     int target = face_count() * ratio;
-    while(face_count() > target)
+    while(face_count() > target) {
         aggregation();
+    }
     std:: cout << " ok!" << std:: endl;
     return;
 }
@@ -454,7 +459,7 @@ void Mesh:: write_into_file(std:: string path) {
         if(get_father(i) != i) continue;
         for(auto &face: vertexes[i].faces) {
             if(face.dim[0] != i) continue;
-            output << face << std:: endl;
+            output << "f " << index[face.dim[0]] << " " << index[face.dim[1]] << " " << index[face.dim[2]] << std:: endl;
         }
     }
     std:: free(index);
