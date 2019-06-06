@@ -11,9 +11,9 @@ CXXFLAGS = -std=c++11 -O3
 LINKFLAGS = -O3
 
 COMMENTS = ''
-TEST_OBJ = arma.obj
-TEST_RATIO = 0.1
-TEST_T = ''
+TEST_OBJ = fixed.perfect.dragon.100K.0.07.obj
+TEST_RATIO = 0.01
+TEST_T = 0.01
 DEL = rm -rf
 
 default:

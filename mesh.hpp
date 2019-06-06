@@ -2,7 +2,11 @@
 # define __MESH_H__
 
 # define MAX_LENGTH 65536ul
+# define DFS_T_SEARCH
+# define FLIP_COST
+# define SHARP_COST
 
+# include <algorithm>
 # include <cassert>
 # include <cstring>
 # include <cmath>
@@ -202,6 +206,8 @@ private:
     void add_pair(int v0, int v1);
     void select_dfs(int v, int p, int depth, double t, std:: set<int> &searched);
     double get_cost(double *dim, double *q);
+    double cos_distance(double *d1, double *d2);
+    void get_norm(double *dim, double *a_dim, double *b_dim, double *c_dim);
     void get_new_v(double *q, double *dim, double *dim_a, double *dim_b);
     void get_p(const Face &face, double *p);
     void add_kp(const Face &face, double *kp);
@@ -282,6 +288,13 @@ double Mesh:: get_cost(double *dim, double *q) {
     return cost;
 }
 
+void Mesh:: get_norm(double *dim, double *a_dim, double *b_dim, double *c_dim) {
+    dim[0] = (b_dim[1] - a_dim[1]) * (c_dim[2] - a_dim[2]) - (c_dim[1] - a_dim[1]) * (b_dim[2] - a_dim[2]);
+    dim[1] = (b_dim[2] - a_dim[2]) * (c_dim[0] - a_dim[0]) - (c_dim[2] - a_dim[2]) * (b_dim[0] - a_dim[0]);
+    dim[2] = (b_dim[0] - a_dim[0]) * (c_dim[1] - a_dim[1]) - (c_dim[0] - a_dim[0]) * (b_dim[1] - a_dim[1]);
+    return;
+}
+
 void Mesh:: get_p(const Face &face, double *p) {
     double *a_dim = vertexes[face.dim[0]].dim, *b_dim = vertexes[face.dim[1]].dim, *c_dim = vertexes[face.dim[2]].dim;
     p[0] = (b_dim[1] - a_dim[1]) * (c_dim[2] - a_dim[2]) - (c_dim[1] - a_dim[1]) * (b_dim[2] - a_dim[2]);
@@ -314,7 +327,12 @@ void Mesh:: get_new_v(double *q, double *dim, double *dim_a, double *dim_b) {
     return;
 }
 
+double Mesh:: cos_distance(double *d1, double *d2) {
+    return (d1[0] * d2[0] + d1[1] * d2[1] + d1[2] * d2[1]) / (sqrt(sqr(d1[0]) + sqr(d1[1]) + sqr(d1[2])) * sqrt(sqr(d2[0]) + sqr(d2[1]) + sqr(d2[2])));
+}
+
 void Mesh:: add_pair(int v0, int v1) {
+    if(v0 > v1) std:: swap(v0, v1);
     Pair pair(v0, v1);
     double *a_dim = vertexes[v0].dim, *b_dim = vertexes[v1].dim;
     double *a_q = vertexes[v0].q, *b_q = vertexes[v1].q;
@@ -322,11 +340,48 @@ void Mesh:: add_pair(int v0, int v1) {
     for(int i = 0; i < 16; ++ i) q[i] = a_q[i] + b_q[i];
     get_new_v(q, pair.dim, a_dim, b_dim);
     pair.cost = get_cost(pair.dim, q);
+
+    /* Flip case */
+    # ifdef FLIP_COST
+    std:: vector<Face> changed_faces[2];
+    changed_faces[0] = vertexes[v0].find_another(v0, v1, true);
+    changed_faces[1] = vertexes[v1].find_another(v1, v0, true);
+    double na_dim[3], nb_dim[3], nc_dim[3], norm_0[3], norm_1[3];
+    double avg_cos_d = 0; int num = 0;
+    for(int c = 0; c < 2; ++ c) for(auto &face: changed_faces[c]) {
+        memcpy(na_dim, vertexes[face.dim[0]].dim, sizeof(double) * 3);
+        memcpy(nb_dim, vertexes[face.dim[1]].dim, sizeof(double) * 3);
+        memcpy(nc_dim, vertexes[face.dim[2]].dim, sizeof(double) * 3);
+        get_norm(norm_0, na_dim, nb_dim, nc_dim);
+        if(face.dim[0] == v0 || face.dim[0] == v1) memcpy(na_dim, pair.dim, sizeof(double) * 3);
+        if(face.dim[1] == v0 || face.dim[1] == v1) memcpy(nb_dim, pair.dim, sizeof(double) * 3);
+        if(face.dim[2] == v0 || face.dim[2] == v1) memcpy(nc_dim, pair.dim, sizeof(double) * 3);
+        get_norm(norm_1, na_dim, nb_dim, nc_dim);
+        avg_cos_d += fabs(cos_distance(norm_0, norm_1));
+        ++ num;
+    }
+    avg_cos_d /= num;
+    pair.cost /= std:: min(1., avg_cos_d / 0.2);
+    # endif
+
+    /* Sharp feature cost */
+    # ifdef SHARP_COST
+    std:: vector<Face> common_faces = vertexes[v0].find_another(v0, v1);
+    if(common_faces.size() == 2) {
+        int a, b, c;
+        a = common_faces[0].dim[0], b = common_faces[0].dim[1], c = common_faces[0].dim[2];
+        get_norm(norm_0, vertexes[a].dim, vertexes[b].dim, vertexes[c].dim);
+        a = common_faces[1].dim[0], b = common_faces[1].dim[1], c = common_faces[1].dim[2];
+        get_norm(norm_1, vertexes[a].dim, vertexes[b].dim, vertexes[c].dim);
+        pair.cost /= std:: min(1., fabs(cos_distance(norm_0, norm_1)) / 0.4);
+    }
+    # endif
+
     heap.insert(pair);
     return;
 }
 
-/* Potential bug: dfs is invalid when v0 and v1 are unconnected. */
+/* Potential bug: dfs is invalid when v0 and v1 are unconnected, and the distance is not accurate. */
 void Mesh:: select_dfs(int v, int p, int depth, double t, std:: set<int> &searched) {
     if((depth > 1 && vertexes[v].distance(vertexes[p]) > t) || searched.count(p) > 0) return;
     searched.insert(p);
@@ -351,12 +406,29 @@ void Mesh:: select_pairs(double t) {
         for(int i = 0; i < vertexes.size(); ++ i) for(int j: edges[i]) if(i < j)
             add_pair(i, j);
     } else {
-        for(int i = 0; i < vertexes.size(); ++ i) {
-            // std:: set<int> searched;
-            // select_dfs(i, i, 0, t, searched);
-            for(int j = i + 1; j < vertexes.size(); ++ j) if(vertexes[i].distance(vertexes[j]) < t || edges[i].count(j))
+        # ifdef DFS_T_SEARCH
+            for(int i = 0; i < vertexes.size(); ++ i) {
+                std:: set<int> searched;
+                select_dfs(i, i, 0, t, searched);
+            }
+        # else
+            std:: vector<int> index;
+            index.resize(vertexes.size());
+            for(int i = 0; i < index.size(); ++ i) index[i] = i;
+            auto cmp = [this] (int i, int j) -> bool { return vertexes[i].dim[0] < vertexes[j].dim[0]; };
+            std:: sort(index.begin(), index.end(), cmp);
+            for(int i = 0; i < vertexes.size(); ++ i) for(int j: edges[i]) if(i < j)
                 add_pair(i, j);
-        }
+            for(int i = 0; i < vertexes.size(); ++ i) {
+                int a = index[i], b;
+                for(int j = i + 1; j < vertexes.size(); ++ j) {
+                    b = index[j];
+                    if(vertexes[a].distance(vertexes[b]) < t || !edges[a].count(b))
+                        add_pair(a, b);
+                    if(vertexes[b].dim[0] - vertexes[a].dim[0] > t) break;
+                }
+            }
+        # endif
     }
     std:: cout << "ok !" << std:: endl;
     return;
@@ -414,7 +486,7 @@ void Mesh:: aggregation() {
             add_pair(v, v0);
     }
 
-    /* Update the value containing v0 in the queue, note that there are new pairs. The effect is brilliant! */
+    /* Update the value containing v0 in the queue. */
     for(auto v: in_queue_pairs_0) if(v != v1)
         add_pair(v, v0);
     
@@ -429,9 +501,8 @@ void Mesh:: simplify(double ratio, double t) {
 
     std:: cout << "Doing aggregation ... " << std:: flush;
     int target = face_count() * ratio;
-    while(face_count() > target) {
+    while(face_count() > target)
         aggregation();
-    }
     std:: cout << "ok!" << std:: endl;
     return;
 }

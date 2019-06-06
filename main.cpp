@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     std:: string input(argv[1]), output(argv[2]);
-    double ratio = atof(argv[3]), t = -1.;
+    double ratio = atof(argv[3]), t = 0.01;
     if(argc == 5) t = atof(argv[4]);
 
     Mesh mesh;
