@@ -329,7 +329,7 @@ void Mesh:: get_new_v(double *q, double *dim, double *dim_a, double *dim_b) {
 }
 
 double Mesh:: cos_distance(double *d1, double *d2) {
-    return (d1[0] * d2[0] + d1[1] * d2[1] + d1[2] * d2[1]) / (sqrt(sqr(d1[0]) + sqr(d1[1]) + sqr(d1[2])) * sqrt(sqr(d2[0]) + sqr(d2[1]) + sqr(d2[2])));
+    return (d1[0] * d2[0] + d1[1] * d2[1] + d1[2] * d2[2]) / (sqrt(sqr(d1[0]) + sqr(d1[1]) + sqr(d1[2])) * sqrt(sqr(d2[0]) + sqr(d2[1]) + sqr(d2[2])));
 }
 
 void Mesh:: add_pair(int v0, int v1) {
@@ -342,12 +342,12 @@ void Mesh:: add_pair(int v0, int v1) {
     get_new_v(q, pair.dim, a_dim, b_dim);
     pair.cost = get_cost(pair.dim, q);
 
+    double na_dim[3], nb_dim[3], nc_dim[3], norm_0[3], norm_1[3];
     /* Flip case */
     # ifdef FLIP_COST
     std:: vector<Face> changed_faces[2];
     changed_faces[0] = vertexes[v0].find_another(v0, v1, true);
     changed_faces[1] = vertexes[v1].find_another(v1, v0, true);
-    double na_dim[3], nb_dim[3], nc_dim[3], norm_0[3], norm_1[3];
     double avg_cos_d = 0; int num = 0;
     for(int c = 0; c < 2; ++ c) for(auto &face: changed_faces[c]) {
         memcpy(na_dim, vertexes[face.dim[0]].dim, sizeof(double) * 3);
@@ -358,11 +358,13 @@ void Mesh:: add_pair(int v0, int v1) {
         if(face.dim[1] == v0 || face.dim[1] == v1) memcpy(nb_dim, pair.dim, sizeof(double) * 3);
         if(face.dim[2] == v0 || face.dim[2] == v1) memcpy(nc_dim, pair.dim, sizeof(double) * 3);
         get_norm(norm_1, na_dim, nb_dim, nc_dim);
-        avg_cos_d += fabs(cos_distance(norm_0, norm_1));
+        avg_cos_d += cos_distance(norm_0, norm_1);
         ++ num;
     }
-    avg_cos_d /= num;
-    pair.cost /= std:: min(1., avg_cos_d / 0.2);
+    if(num) {
+        avg_cos_d /= num; avg_cos_d += 1.1;
+        pair.cost /= std:: min(1., avg_cos_d / 1.3);
+    }
     # endif
 
     /* Sharp feature cost */
@@ -531,15 +533,22 @@ void Mesh:: write_into_file(std:: string path) {
         index[i] = ++ cnt;
         output << vertexes[i] << std:: endl;
     }
+    double error_sum = 0; int vertex_cnt = 0, face_cnt = 0;
     for(int i = 0; i < vertexes.size(); ++ i) {
         if(get_father(i) != i) continue;
+        ++ vertex_cnt;
+        error_sum += get_cost(vertexes[i].dim, vertexes[i].q);
         for(auto &face: vertexes[i].faces) {
             if(face.dim[0] != i) continue;
             output << "f " << index[face.dim[0]] << " " << index[face.dim[1]] << " " << index[face.dim[2]] << std:: endl;
+            ++ face_cnt;
         }
     }
     std:: free(index);
     std:: cout << "ok !" << std:: endl;
+    std:: cout << "Vertex: " << vertex_cnt << std:: endl;
+    std:: cout << "Face: " << face_cnt << std:: endl;
+    std:: cout << "Avg error: " << error_sum / vertex_cnt << std:: endl;
     return;
 }
 

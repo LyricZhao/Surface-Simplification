@@ -11,8 +11,8 @@ CXXFLAGS = -std=c++11 -O3
 LINKFLAGS = -O3
 
 COMMENTS = ''
-TEST_OBJ = fixed.perfect.dragon.100K.0.07.obj
-TEST_RATIO = 0.01
+TEST_OBJ = arma.obj
+TEST_RATIO = 0.1
 TEST_T = 0.01
 DEL = rm -rf
 
@@ -33,7 +33,7 @@ $(ENTRANCE).o: $(ENTRANCE).cpp $(HPPS) Makefile
 
 run:
 	make
-	./$(APP) meshes/$(TEST_OBJ) outputs/$(TEST_OBJ) $(TEST_RATIO) $(TEST_T)
+	time ./$(APP) meshes/$(TEST_OBJ) outputs/$(TEST_OBJ) $(TEST_RATIO) $(TEST_T)
 
 clean:
 	make clean_objs
