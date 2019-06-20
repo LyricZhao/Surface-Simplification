@@ -397,7 +397,7 @@ void Mesh:: select_dfs(int v, int p, int depth, double t, std:: set<int> &search
 }
 
 void Mesh:: select_pairs(double t) {
-    std:: cout << "Selecting pairs with t = " << t << " ... " << std:: flush;
+    std:: cout << "[Stage 4/6] Selecting pairs with t = " << t << " ... " << std:: flush;
     edges.resize(vertexes.size());
     heap.resize_queue_pairs(vertexes.size());
     for(int i = 0; i < vertexes.size(); ++ i) {
@@ -439,7 +439,7 @@ void Mesh:: select_pairs(double t) {
 }
 
 void Mesh:: calculate_Q() {
-    std:: cout << "Calculating Q matrix ... " << std:: flush;
+    std:: cout << "[Stage 3/6] Calculating Q matrix ... " << std:: flush;
     for(auto &v: vertexes) {
         memset(v.q, 0, sizeof(int) * 16);
         for(auto &face: v.faces)
@@ -499,11 +499,11 @@ void Mesh:: aggregation() {
 }
 
 void Mesh:: simplify(double ratio, double t) {
-    std:: cout << "Starting to simlify ... ok !" << std:: endl;
+    std:: cout << "[Stage 2/6] Start to simlify with t = " << t << ", ratio = " << ratio << " ... ok !" << std:: endl;
     calculate_Q();
     select_pairs(t);
 
-    std:: cout << "Doing aggregation ... " << std:: flush;
+    std:: cout << "[Stage 5/6] Doing aggregation ... " << std:: flush;
     int target = face_count() * ratio;
     while(face_count() > target)
         aggregation();
@@ -512,20 +512,22 @@ void Mesh:: simplify(double ratio, double t) {
 }
 
 void Mesh:: load_from_file(std:: string path) {
-    std:: cout << "Loading from obj file " + path + " ... " << std:: flush;
+    std:: cout << "[Stage 1/6] Loading from obj file " + path + " ... " << std:: flush;
     std:: ifstream input(path);
     while(input.getline(buffer, MAX_LENGTH)) {
         std:: string line = buffer;
         if(!line.length()) continue;
-        if(line[0] == 'v') add_vertex(line);
-        if(line[0] == 'f') add_face(line);
+        if(line[0] == 'v' && line[1] == ' ') add_vertex(line);
+        if(line[0] == 'f' && line[1] == ' ') add_face(line);
     }
     std:: cout << "ok !" << std:: endl;
+    std:: cout << "- Vertexes: " << tot << std:: endl;
+    std:: cout << "- Faces: " << face_tot << std:: endl;
     return;
 }
 
 void Mesh:: write_into_file(std:: string path) {
-    std:: cout << "Writing into obj file " + path + " ... " << std:: flush;
+    std:: cout << "[Stage 6/6] Writing into obj file " + path + " ... " << std:: flush;
     int *index = (int*) std:: malloc(sizeof(int) * tot), cnt = 0;
     std:: ofstream output(path);
     for(int i = 0; i < vertexes.size(); ++ i) {
@@ -545,10 +547,12 @@ void Mesh:: write_into_file(std:: string path) {
         }
     }
     std:: free(index);
-    std:: cout << "ok !" << std:: endl;
-    std:: cout << "Vertex: " << vertex_cnt << std:: endl;
-    std:: cout << "Face: " << face_cnt << std:: endl;
-    std:: cout << "Avg error: " << error_sum / vertex_cnt << std:: endl;
+    std:: cout << "ok !" << std:: endl << std:: endl;
+
+    std:: cout << "Summary:" << std:: endl;
+    std:: cout << "- Vertex: " << vertex_cnt << std:: endl;
+    std:: cout << "- Face: " << face_cnt << std:: endl;
+    std:: cout << "- Avg error: " << error_sum / vertex_cnt << std:: endl;
     return;
 }
 

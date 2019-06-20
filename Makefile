@@ -11,8 +11,8 @@ CXXFLAGS = -std=c++11 -O3
 LINKFLAGS = -O3
 
 COMMENTS = ''
-TEST_OBJ = arma.obj
-TEST_RATIO = 0.1
+TEST_OBJ = horse.fine.90k.obj
+TEST_RATIO = 0.001
 TEST_T = 0.01
 DEL = rm -rf
 
